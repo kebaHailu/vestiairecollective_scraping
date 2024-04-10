@@ -9,6 +9,9 @@ except ImportError:
 finally:
     from selenium import webdriver as wd 
     from selenium.webdriver.common.by import By 
+    from selenium.webdriver.support.ui import WebDriverWait as ww , Select
+    from selenium.webdriver.support import expected_conditions as EC 
+    
 
 
 
@@ -39,13 +42,16 @@ for val in values.values():
 
 # custome find element function to remove exception 
 def find_element(body, path):
-    res = body.find_elements(By.XPATH, path)
-    if len(res) > 0:
-        take =  res[0].text.strip()
-        if take.startswith('(') and take.endswith(',)'):
-            return take[1:len(take)-2]
-        return take 
-    return ""
+    try:
+        res = body.find_elements(By.XPATH, path)
+        if len(res) > 0:
+            take =  res[0].text.strip()
+            if take.startswith('(') and take.endswith(',)'):
+                return take[1:len(take)-2]
+            return take 
+        return ""
+    except:
+        return ""
 
 
 
@@ -53,13 +59,55 @@ def find_element(body, path):
 ## after every scrapping either the links or data will be stored permanently ## 
 
 fnames = [ 'link']
+
+# Read the existing data 
+def read_csv_data():
+    existing_data = []
+    try:
+        with open('data.csv', 'r', newline='', encoding="utf-8") as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                existing_data.append(row)
+        return existing_data
+    except FileNotFoundError:
+        return []
+
 def save_as_csv(data,fieldnames,finalname):
-    filename = finalname
-    with open(filename, 'w',newline='',encoding="utf-8") as csvfile:
+
+    for i in range(len(data)):
+        dictdata = data[i]
+        temp = dictdata.copy()
+        for label in dictdata.keys():
+            if label not in fieldnames:
+                del temp[label]
+        data[i] = temp.copy()
+    with open(finalname, 'w',newline='',encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(data)
+ # Read existing data from the CSV file 
 ###########  make the final store ###########
+
+
+########$$$$$ create a function which will change the dollar into other payment $$$$$#####
+def change_price():
+    #scroll to the end to access all objects in a page
+    scroll_height = 0
+    viewport_height = driver.execute_script("return window.innerHeight")
+    scroll_increment = viewport_height // 20  # Adjust the scroll increment as desired
+
+    while scroll_height < driver.execute_script("return document.documentElement.scrollHeight"):
+        driver.execute_script(f"window.scrollTo(0, {scroll_height});")
+        scroll_height += scroll_increment
+
+    time.sleep(2)
+    
+
+    # //*[@id="footer"]/div[1]/div/div[2]/button
+    # /html/body/div[6]/div/div/div/div/div/form/div[1]/div[3]/div/select/option[3]
+    # /html/body/div[6]/div/div/div/div/div/form/div[2]/div/button
+
+
 
 
 
@@ -103,22 +151,40 @@ driver = wd.Chrome()
 ########### finish phase 1 scrapping ###########
 
 #access the stored link.csv file and convert it to the list
-all_stored_link = []
-products = []
-with open('links.csv', 'r') as file:
-    csv_reader = csv.DictReader(file)
-    for row in csv_reader:
-        link = row['link']
-        all_stored_link.append(link)
+# all_stored_link = []
+# products = read_csv_data()
+# failed = []
+
+# print(len(products))
+# with open('link.csv', 'r') as file:
+#     csv_reader = csv.DictReader(file)
+#     for row in csv_reader:
+#         link = row['link']
+#         all_stored_link.append(link)
 
 
 
 ########### Start phase 2 scrapping ###########
 ## In this phase scrap all product pages and store there product ##
-for href in all_stored_link:
-    driver.get(href)
-    time.sleep(1)
+for href in range(2): #all_stored_link[len(products):]
     try:
+        driver.get('https://www.vestiairecollective.com/men-clothing/shirts/prada/blue-cotton-prada-shirt-42804505.shtml')
+        
+        change_price()
+        btn = driver.find_element(By.XPATH,'//*[@id="footer"]/div[1]/div/div[2]/button')
+        btn.click()
+        popup_element = ww(driver, 10).until(EC.visibility_of_element_located((By.XPATH, '/html/body/div[6]/div/div')))
+        select_element = popup_element.find_element(By.CLASS_NAME, 'currency')
+        select = Select(select_element)
+        select.select_by_value('GBP')
+        popup_btn = popup_element.find_element(By.XPATH, '/html/body/div[6]/div/div/div/div/div/form/div[2]/div/button')
+        popup_btn.click()
+
+        time.sleep(1)
+
+
+        # this will change the price of the product
+
         product_detail = driver.find_element(By.XPATH, '//*[@id="__next"]/div/main/section[1]/div/div/div[2]/div[2]/div/div/ul')
         var1 = find_element(product_detail, '//*[@id="__next"]/div/main/section[1]/div/div/div[2]/div[2]/div[1]/div/ul/li[1]/span[1]')
         var2 = find_element(product_detail, '//*[@id="__next"]/div/main/section[1]/div/div/div[2]/div[2]/div[1]/div/ul/li[2]/span[1]')
@@ -169,9 +235,11 @@ for href in all_stored_link:
         product['Image'] = image_element.get_attribute('src')
         product['Name'] = driver.title.split('-')[0]
 
-        products.append(product)
-        save_as_csv(products,fieldnames,'data.csv')
+        # products.append(product)
+        # save_as_csv(products,fieldnames,'datas.csv')
     except Exception as e:
+        # failed.append({'failed':href})
+        # save_as_csv(failed,['failed'],'failed.csv')
         print(e)
 
 ########### finish phase 2 scrapping ###########
@@ -179,37 +247,3 @@ for href in all_stored_link:
 driver.quit()
 
 
-
-
-
-#  usefull elements for vestiairecollective
-
-# link - //*[@id="product_id_42756977"]/div[3]/a[1], //*[@id="product_id_42774659"]/div[3]/a[1]
-
-# next - //*[@id="__next"]/div/main/div[3]/div/div[2]/div[2]/div[1]/div[2]/button[9]/span[1]
-# dd     //*[@id="__next"]/div/main/div[3]/div/div[2]/div[2]/div[1]/div[2]/button[10]/span[1]
-
-
-# detail 
-# //*[@id="__next"]/div/main/section[1]/div/div/div[2]/div[2]/div/div/ul
-# //*[@id="__next"]/div/main/div[1]/div/div[3]/div/div[1]/div/div[2]/div/p/span[1] price
-# //*[@id="__next"]/div/main/div[1]/div/div[3]/div/div[1]/div/div[3]/p[1] size 
-
-# general info 
-# '''
-# Online since:2024-03-29
-# Categories :Men
-# Category:Clothing
-# Sub-category:Shirts
-# Designer:Louis Vuitton
-# Condition:Very good conditionMore info
-# Material:Cotton
-# Color:Black
-# Size:XL InternationalSizing guide
-# Location:United States, from the seller Ningen
-# Reference:42756977
-# '''
-
-# /html/body/div[2]/div/main/div[3]/div/div[1]/div[2]/div[2]/ul/li[2]/div
-# //*[@id="product_id_42781397"]/div[3]/a[1]
-# //*[@id="product_id_42781397"]
